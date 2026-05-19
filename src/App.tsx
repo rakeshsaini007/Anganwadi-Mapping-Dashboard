@@ -83,66 +83,34 @@ export default function App() {
     setAlert(null);
 
     try {
-      // Try fetching from GAS first
+      // Try fetching from GAS
       let data = null;
       if (!GAS_URL.includes('YOUR_DEPLOYMENT_ID')) {
         const response = await fetch(`${GAS_URL}?udise=${searchCode}`);
         data = await response.json();
       }
 
-      if (data && !data.error) {
+      if (data && !data.error && data.existingData) {
         setFormData({
           udise: data.udise,
           schoolName: data.schoolName,
-          isOperated: data.existingData?.isOperated || '',
-          centerCount: data.existingData?.centerCount || '',
-          distanceCenterCount: data.existingData?.distanceCenterCount || '',
-          extraRoom: data.existingData?.extraRoom || '',
-          openSpace: data.existingData?.openSpace || '',
-          buildingStatus: data.existingData?.buildingStatus || '',
-          buildingStatusCount: data.existingData?.buildingStatusCount || '',
-          lastUpdated: data.existingData?.lastUpdated || '',
+          isOperated: data.existingData.isOperated || '',
+          centerCount: data.existingData.centerCount || '',
+          distanceCenterCount: data.existingData.distanceCenterCount || '',
+          extraRoom: data.existingData.extraRoom || '',
+          openSpace: data.existingData.openSpace || '',
+          buildingStatus: data.existingData.buildingStatus || '',
+          buildingStatusCount: data.existingData.buildingStatusCount || '',
+          lastUpdated: data.existingData.lastUpdated || '',
         });
-        if (data.existingData) {
-          setIsUpdate(true);
-        }
+        setIsUpdate(true);
+      } else if (data && data.error) {
+        setError('UDISE Code not found in master records.');
       } else {
-        // Fallback to local presets
-        const localMatch = PRESET_SCHOOLS.find(s => s.udise === searchCode);
-        if (localMatch) {
-          setFormData({
-            udise: localMatch.udise,
-            schoolName: localMatch.name,
-            isOperated: '',
-            centerCount: '',
-            distanceCenterCount: '',
-            extraRoom: '',
-            openSpace: '',
-            buildingStatus: '',
-            buildingStatusCount: '',
-          });
-        } else {
-          setError('UDISE Code not found. Please check and try again.');
-        }
+        setError('इस विद्यालय का डेटा अभी तक दर्ज नहीं किया गया है (Data not found in sheet).');
       }
     } catch (err) {
-      // Fallback to local if fetch fails
-      const localMatch = PRESET_SCHOOLS.find(s => s.udise === searchCode);
-      if (localMatch) {
-        setFormData({
-          udise: localMatch.udise,
-          schoolName: localMatch.name,
-          isOperated: '',
-          centerCount: '',
-          distanceCenterCount: '',
-          extraRoom: '',
-          openSpace: '',
-          buildingStatus: '',
-          buildingStatusCount: '',
-        });
-      } else {
-        setError('Connection error or school not found.');
-      }
+      setError('Connection error. Please check your internet and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -573,21 +541,9 @@ export default function App() {
             </motion.div>
           )}
 
-          {/* Initial State / Empty State */}
+          {/* Initial State / Empty State - HIDDEN based on user request */}
           {!formData && !error && !isLoading && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-20 px-10 border-2 border-dashed border-indigo-100 rounded-[40px] bg-indigo-50/20"
-            >
-              <div className="bg-white w-16 h-16 rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-6">
-                <MapPin className="w-8 h-8 text-indigo-400" />
-              </div>
-              <h3 className="text-xl font-bold text-slate-800 mb-2">Ready to Search</h3>
-              <p className="text-slate-500 font-medium max-w-xs mx-auto">
-                कृपया विद्यालय का UDISE कोड दर्ज करें और मैपिंग प्रक्रिया शुरू करें।
-              </p>
-            </motion.div>
+            <div className="h-20" />
           )}
         </AnimatePresence>
       </main>
