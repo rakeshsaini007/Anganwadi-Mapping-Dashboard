@@ -1,0 +1,6 @@
+{
+  "name": "Anganwadi Mapping Dashboard",
+  "description": "A refined tool for mapping Anganwadi centers in schools using UDISE codes and Google Sheets integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
