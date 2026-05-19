@@ -1,31 +1,40 @@
 function doGet(e) {
   const udise = (e.parameter.udise || "").toString().trim();
+  if (!udise) return createJsonResponse({ error: "UDISE code is missing" });
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const schoolSheet = ss.getSheetByName("Schools");
+  
+  // 1. Try to find the master sheet (Schools)
+  let schoolSheet = ss.getSheetByName("Schools") || ss.getSheets()[0];
   const dataSheet = ss.getSheetByName("Data") || ss.insertSheet("Data");
   
+  if (!schoolSheet) {
+    return createJsonResponse({ error: "No sheet found in spreadsheet." });
+  }
+
   const schoolData = schoolSheet.getDataRange().getValues();
   let schoolName = "";
   let foundInMaster = false;
 
-  // 1. Find school name in Master List (Range A2:A292)
-  const searchLimit = Math.min(schoolData.length, 292);
-  for (let i = 1; i < searchLimit; i++) {
-    if (schoolData[i][0] && schoolData[i][0].toString().trim() === udise) {
-      schoolName = schoolData[i][1];
+  // Search for UDISE in column A, School Name in column B
+  for (let i = 1; i < schoolData.length; i++) {
+    const rowUdise = (schoolData[i][0] || "").toString().trim();
+    if (rowUdise === udise) {
+      schoolName = schoolData[i][1] || "Unknown School";
       foundInMaster = true;
       break;
     }
   }
 
   if (!foundInMaster) {
-    return ContentService.createTextOutput(JSON.stringify({ error: "School not found" }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return createJsonResponse({ 
+      error: `विद्यालय कोड ${udise} रिकॉर्ड में नहीं मिला। कृपया अपनी गूगल शीट चेक करें।` 
+    });
   }
 
-  // 2. Search for existing data in "Data" sheet
+  // 2. Search for existing mapping data in "Data" sheet
   let mappedData = null;
-  if (dataSheet.getLastRow() > 0) {
+  if (dataSheet.getLastRow() > 1) {
     const existingData = dataSheet.getDataRange().getValues();
     for (let i = 1; i < existingData.length; i++) {
       if (existingData[i][0] && existingData[i][0].toString().trim() === udise) {
@@ -44,11 +53,11 @@ function doGet(e) {
     }
   }
 
-  return ContentService.createTextOutput(JSON.stringify({ 
+  return createJsonResponse({ 
     udise: udise, 
     schoolName: schoolName,
     existingData: mappedData
-  })).setMimeType(ContentService.MimeType.JSON);
+  });
 }
 
 function doPost(e) {
@@ -99,18 +108,19 @@ function doPost(e) {
 
     let action = "saved";
     if (rowIndex > -1) {
-      // Update the specific row
       sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
       action = "updated";
     } else {
-      // Create new row
       sheet.appendRow(rowData);
     }
     
-    return ContentService.createTextOutput(JSON.stringify({ success: true, action: action }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return createJsonResponse({ success: true, action: action });
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.message }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return createJsonResponse({ success: false, error: err.toString() });
   }
+}
+
+function createJsonResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
 }

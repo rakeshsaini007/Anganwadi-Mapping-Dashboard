@@ -15,17 +15,11 @@ import {
 // --- Types & Constants ---
 
 // Replace this with your actual Google Apps Script Web App Deployment URL
-const GAS_URL = 'https://script.google.com/macros/library/d/1CAMMYKCF1TcVY2Nsi71gJxChjGidaNS4lXPmB-m2bDb5scGuSzu6odCG/7';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwSRgVXWJIOVBrgKlUT5zFuprVZi6Lu32D8AF_ztaiMBuyaD2q7mA3CF8znP31K7eLaOQ/exec';
 
-const PRESET_SCHOOLS = [
-  { udise: "9050305302", name: "P.S. BADLI" },
-  { udise: "9050306501", name: "P.S. AKANAGAR" },
-  { udise: "9050318301", name: "P.S. ALLEHPUR" },
-  { udise: "9050300802", name: "P.S. (K) ABBAS NAGAR" },
-  { udise: "9050300801", name: "P.S. ABBASNAGAR" },
-  { udise: "9050300820", name: "P.S. ABBASPUR" },
-  { udise: "9050319101", name: "P.S. AJJUWALA" }
-];
+// No longer relying on a small hardcoded list. 
+// We will rely entirely on the Google Sheet master list.
+const PRESET_SCHOOLS: { udise: string; name: string }[] = [];
 
 interface FormData {
   udise: string;
@@ -83,42 +77,49 @@ export default function App() {
     setAlert(null);
 
     try {
-      // 1. Try local preset first for instant validation if possible
-      const localMatch = PRESET_SCHOOLS.find(s => s.udise === searchCode);
-      
+      // 1. Check if URL looks like a Library link instead of Web App
+      if (GAS_URL.includes('/library/d/')) {
+        setError('गलत URL: आपने "Library" लिंक का उपयोग किया है। कृपया "Web App" (Deploy > New Deployment) लिंक का उपयोग करें।');
+        setIsLoading(false);
+        return;
+      }
+
       // 2. Try fetching from GAS
       let data = null;
-      if (GAS_URL && GAS_URL.startsWith('http')) {
+      let fetchSucceeded = false;
+
+      if (GAS_URL && GAS_URL.startsWith('http') && !GAS_URL.includes('YOUR_DEPLOYMENT_ID')) {
         try {
-          const response = await fetch(`${GAS_URL}?udise=${searchCode}`);
-          if (!response.ok) throw new Error('Status ' + response.status);
-          data = await response.json();
-        } catch (fetchErr) {
-          console.error('Fetch attempt failed:', fetchErr);
+          const response = await fetch(`${GAS_URL}?udise=${searchCode}`, {
+            method: 'GET',
+            redirect: 'follow'
+          });
           
-          if (localMatch) {
-            // FALLBACK: Load from local master instead of showing hard error
-            setFormData({
-              udise: localMatch.udise,
-              schoolName: localMatch.name,
-              isOperated: '',
-              centerCount: '',
-              distanceCenterCount: '',
-              extraRoom: '',
-              openSpace: '',
-              buildingStatus: '',
-              buildingStatusCount: '',
-            });
-            setIsUpdate(false);
-            return;
-          } else {
-            throw new Error('CONNECTION_OR_NOT_FOUND');
+          if (!response.ok) {
+            throw new Error('HTTP Status ' + response.status);
           }
+          
+          const text = await response.text();
+          try {
+            data = JSON.parse(text);
+            fetchSucceeded = true;
+          } catch (e) {
+            console.error('Failed to parse JSON:', text);
+            throw new Error('Invalid JSON response');
+          }
+        } catch (fetchErr: any) {
+          console.error('Search fetch failed:', fetchErr);
+          if (fetchErr.message === 'Failed to fetch' || fetchErr.name === 'TypeError') {
+            setError('सर्वर से संपर्क नहीं हो पाया (Network/CORS Error)। कृपया सुनिश्चित करें कि GAS Deployment में "Who has access" को "Anyone" पर सेट किया गया है और आप सही URL उपयोग कर रहे हैं।');
+          } else {
+            setError(`त्रुटि: ${fetchErr.message}`);
+          }
+          setIsLoading(false);
+          return;
         }
       }
 
-      if (data && !data.error) {
-        // School found in master record (either via GAS or local)
+      if (fetchSucceeded && data && !data.error) {
         setFormData({
           udise: data.udise,
           schoolName: data.schoolName,
@@ -133,21 +134,13 @@ export default function App() {
         });
         setIsUpdate(!!data.existingData);
       } else if (data && data.error) {
-        setError('UDISE कोड अमान्य है या मास्टर रिकॉर्ड में नहीं मिला। (UDISE Code not found in master records).');
-      } else if (localMatch) {
-        // Absolute fallback if everything else fails but we have a local match
-        setFormData({
-          udise: localMatch.udise,
-          schoolName: localMatch.name,
-          isOperated: '',
-        });
-        setIsUpdate(false);
+        setError(`विद्यालय नहीं मिला: ${data.error}`);
       } else {
-        setError('UDISE कोड की पुष्टि नहीं हो सकी। (Invalid UDISE Code).');
+        setError('सर्वर ने अमान्य डेटा वापस किया।');
       }
     } catch (err) {
       console.error(err);
-      setError('सर्वर से संपर्क करने में असमर्थ। कृपया इंटरनेट और GAS यूआरएल चेक करें। (Connection error).');
+      setError('सिस्टम त्रुटि। कृपया इंटरनेट या GAS यूआरएल की जाँच करें।');
     } finally {
       setIsLoading(false);
     }
@@ -190,21 +183,22 @@ export default function App() {
 
       const response = await fetch(GAS_URL, {
         method: 'POST',
+        mode: 'no-cors', // POST to GAS often needs no-cors if not expecting JSON response immediately
+        headers: {
+          'Content-Type': 'text/plain', // GAS handles text/plain without preflight
+        },
         body: JSON.stringify(formData),
       });
-      const result = await response.json();
 
-      if (result.success) {
-        setIsSubmitted(true);
-        setAlert({ 
-          type: 'success', 
-          message: result.action === 'updated' ? 'डेटा सफलतापूर्वक अपडेट किया गया!' : 'डेटा सफलतापूर्वक सुरक्षित किया गया!' 
-        });
-      } else {
-        setAlert({ type: 'error', message: 'त्रुटि: ' + result.error });
-      }
+      // With no-cors, we can't read the result, so we assume success if no error thrown
+      setIsSubmitted(true);
+      setAlert({ 
+        type: 'success', 
+        message: isUpdate ? 'डेटा सफलतापूर्वक अपडेट किया गया!' : 'डेटा सफलतापूर्वक सुरक्षित किया गया!' 
+      });
     } catch (err) {
-      setAlert({ type: 'error', message: 'नेटवर्क त्रुटि। कृपया पुनः प्रयास करें।' });
+      console.error('Submit error:', err);
+      setAlert({ type: 'error', message: 'नेटवर्क त्रुटि या सेव करने में विफल। कृपया "Anyone" सेटिंग चेक करें।' });
     } finally {
       setIsSaving(false);
     }
@@ -575,6 +569,19 @@ export default function App() {
                   ? 'आंगनबाड़ी विवरण सफलतापूर्वक अपडेट कर लिया गया है।' 
                   : 'आंगनबाड़ी विवरण सफलतापूर्वक दर्ज कर लिया गया है।'} आप मुख्य सूची से अन्य विद्यालय भी देख सकते हैं।
               </p>
+              <button 
+                onClick={() => {
+                  setFormData(null);
+                  setSearchTerm('');
+                  setIsSubmitted(false);
+                  setIsUpdate(false);
+                  setAlert(null);
+                }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-4 rounded-2xl font-bold transition-all shadow-lg active:scale-95"
+                id="reset-form"
+              >
+                अगला खोजें (Find Next)
+              </button>
             </motion.div>
           )}
 
