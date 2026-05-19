@@ -15,7 +15,7 @@ import {
 // --- Types & Constants ---
 
 // Replace this with your actual Google Apps Script Web App Deployment URL
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxQBeEDK9sTvILRILufCdSm948onK7oTCc4bVabJnw4Lk0kbSUH4h1-t-yFzoVa4q78Ng/exec';
+const GAS_URL = 'https://script.google.com/macros/library/d/1CAMMYKCF1TcVY2Nsi71gJxChjGidaNS4lXPmB-m2bDb5scGuSzu6odCG/7';
 
 const PRESET_SCHOOLS = [
   { udise: "9050305302", name: "P.S. BADLI" },
