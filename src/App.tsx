@@ -85,32 +85,40 @@ export default function App() {
     try {
       // Try fetching from GAS
       let data = null;
-      if (!GAS_URL.includes('YOUR_DEPLOYMENT_ID')) {
+      if (GAS_URL && !GAS_URL.includes('YOUR_DEPLOYMENT_ID')) {
         const response = await fetch(`${GAS_URL}?udise=${searchCode}`);
+        if (!response.ok) throw new Error('Network response was not ok');
         data = await response.json();
+      } else {
+        // Fallback to local presets if URL is not configured
+        const localMatch = PRESET_SCHOOLS.find(s => s.udise === searchCode);
+        if (localMatch) {
+          data = { udise: localMatch.udise, schoolName: localMatch.name, existingData: null };
+        }
       }
 
-      if (data && !data.error && data.existingData) {
+      if (data && !data.error) {
         setFormData({
           udise: data.udise,
           schoolName: data.schoolName,
-          isOperated: data.existingData.isOperated || '',
-          centerCount: data.existingData.centerCount || '',
-          distanceCenterCount: data.existingData.distanceCenterCount || '',
-          extraRoom: data.existingData.extraRoom || '',
-          openSpace: data.existingData.openSpace || '',
-          buildingStatus: data.existingData.buildingStatus || '',
-          buildingStatusCount: data.existingData.buildingStatusCount || '',
-          lastUpdated: data.existingData.lastUpdated || '',
+          isOperated: data.existingData?.isOperated || '',
+          centerCount: data.existingData?.centerCount || '',
+          distanceCenterCount: data.existingData?.distanceCenterCount || '',
+          extraRoom: data.existingData?.extraRoom || '',
+          openSpace: data.existingData?.openSpace || '',
+          buildingStatus: data.existingData?.buildingStatus || '',
+          buildingStatusCount: data.existingData?.buildingStatusCount || '',
+          lastUpdated: data.existingData?.lastUpdated || '',
         });
-        setIsUpdate(true);
+        setIsUpdate(!!data.existingData);
       } else if (data && data.error) {
-        setError('UDISE Code not found in master records.');
+        setError('विद्यालय का UDISE कोड मास्टर रिकॉर्ड में नहीं मिला। (UDISE Code not found in master records).');
       } else {
-        setError('इस विद्यालय का डेटा अभी तक दर्ज नहीं किया गया है (Data not found in sheet).');
+        setError('UDISE कोड अमान्य है या कनेक्शन में त्रुटि है। (UDISE Code not found).');
       }
     } catch (err) {
-      setError('Connection error. Please check your internet and try again.');
+      console.error(err);
+      setError('सर्वर से संपर्क नहीं हो सका। कृपया इंटरनेट चेक करें। (Connection error or invalid URL).');
     } finally {
       setIsLoading(false);
     }
