@@ -8,8 +8,9 @@ function doGet(e) {
   let schoolName = "";
   let foundInMaster = false;
 
-  // 1. Find school name in Master List
-  for (let i = 1; i < schoolData.length; i++) {
+  // 1. Find school name in Master List (Range A2:A292)
+  const searchLimit = Math.min(schoolData.length, 292);
+  for (let i = 1; i < searchLimit; i++) {
     if (schoolData[i][0] && schoolData[i][0].toString().trim() === udise) {
       schoolName = schoolData[i][1];
       foundInMaster = true;
