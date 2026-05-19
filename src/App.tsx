@@ -83,59 +83,71 @@ export default function App() {
     setAlert(null);
 
     try {
-      // Try fetching from GAS
+      // 1. Try local preset first for instant validation if possible
+      const localMatch = PRESET_SCHOOLS.find(s => s.udise === searchCode);
+      
+      // 2. Try fetching from GAS
       let data = null;
       if (GAS_URL && GAS_URL.startsWith('http')) {
         try {
-          const response = await fetch(`${GAS_URL}?udise=${searchCode}`, {
-            method: 'GET',
-            mode: 'cors',
-          });
-          if (!response.ok) throw new Error('HTTP status ' + response.status);
+          const response = await fetch(`${GAS_URL}?udise=${searchCode}`);
+          if (!response.ok) throw new Error('Status ' + response.status);
           data = await response.json();
         } catch (fetchErr) {
           console.error('Fetch attempt failed:', fetchErr);
-          // If fetch fails, we still try to check if the school exists in PRESET_MASTER
-          const localMatch = PRESET_SCHOOLS.find(s => s.udise === searchCode);
+          
           if (localMatch) {
-            setError('सर्वर से संपर्क नहीं हो पाया, परन्तु यह विद्यालय मास्टर लिस्ट में है। कृपया इंटरनेट या सर्वर सेटिंग चेक करें। (Server unreachable, but school exists in master).');
+            // FALLBACK: Load from local master instead of showing hard error
+            setFormData({
+              udise: localMatch.udise,
+              schoolName: localMatch.name,
+              isOperated: '',
+              centerCount: '',
+              distanceCenterCount: '',
+              extraRoom: '',
+              openSpace: '',
+              buildingStatus: '',
+              buildingStatusCount: '',
+            });
+            setIsUpdate(false);
+            return;
           } else {
-            throw new Error('NETWORK_OR_NOT_FOUND');
+            throw new Error('CONNECTION_OR_NOT_FOUND');
           }
-          return;
         }
       }
 
       if (data && !data.error) {
-        if (data.existingData) {
-          setFormData({
-            udise: data.udise,
-            schoolName: data.schoolName,
-            isOperated: data.existingData.isOperated || '',
-            centerCount: data.existingData.centerCount || '',
-            distanceCenterCount: data.existingData.distanceCenterCount || '',
-            extraRoom: data.existingData.extraRoom || '',
-            openSpace: data.existingData.openSpace || '',
-            buildingStatus: data.existingData.buildingStatus || '',
-            buildingStatusCount: data.existingData.buildingStatusCount || '',
-            lastUpdated: data.existingData.lastUpdated || '',
-          });
-          setIsUpdate(true);
-        } else {
-          setError('इस विद्यालय का डेटा अभी तक दर्ज नहीं किया गया है। (Data not found in records).');
-        }
+        // School found in master record (either via GAS or local)
+        setFormData({
+          udise: data.udise,
+          schoolName: data.schoolName,
+          isOperated: data.existingData?.isOperated || '',
+          centerCount: data.existingData?.centerCount || '',
+          distanceCenterCount: data.existingData?.distanceCenterCount || '',
+          extraRoom: data.existingData?.extraRoom || '',
+          openSpace: data.existingData?.openSpace || '',
+          buildingStatus: data.existingData?.buildingStatus || '',
+          buildingStatusCount: data.existingData?.buildingStatusCount || '',
+          lastUpdated: data.existingData?.lastUpdated || '',
+        });
+        setIsUpdate(!!data.existingData);
       } else if (data && data.error) {
-        setError('विद्यालय का UDISE कोड मास्टर रिकॉर्ड में नहीं मिला। (UDISE Code not found in master records).');
+        setError('UDISE कोड अमान्य है या मास्टर रिकॉर्ड में नहीं मिला। (UDISE Code not found in master records).');
+      } else if (localMatch) {
+        // Absolute fallback if everything else fails but we have a local match
+        setFormData({
+          udise: localMatch.udise,
+          schoolName: localMatch.name,
+          isOperated: '',
+        });
+        setIsUpdate(false);
       } else {
-        setError('UDISE कोड अमान्य है या डेटा उपलब्ध नहीं है। (Invalid UDISE or no data).');
+        setError('UDISE कोड की पुष्टि नहीं हो सकी। (Invalid UDISE Code).');
       }
     } catch (err) {
       console.error(err);
-      if (err instanceof Error && err.message === 'NETWORK_OR_NOT_FOUND') {
-        setError('विद्यालय नहीं मिला या नेटवर्क त्रुटि। (School not found or network error).');
-      } else {
-        setError('सर्वर से संपर्क नहीं हो सका। कृपया अपनी इंटरनेट सेटिंग या GAS यूआरएल चेक करें। (Connection error).');
-      }
+      setError('सर्वर से संपर्क करने में असमर्थ। कृपया इंटरनेट और GAS यूआरएल चेक करें। (Connection error).');
     } finally {
       setIsLoading(false);
     }
