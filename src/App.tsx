@@ -85,40 +85,57 @@ export default function App() {
     try {
       // Try fetching from GAS
       let data = null;
-      if (GAS_URL && !GAS_URL.includes('YOUR_DEPLOYMENT_ID')) {
-        const response = await fetch(`${GAS_URL}?udise=${searchCode}`);
-        if (!response.ok) throw new Error('Network response was not ok');
-        data = await response.json();
-      } else {
-        // Fallback to local presets if URL is not configured
-        const localMatch = PRESET_SCHOOLS.find(s => s.udise === searchCode);
-        if (localMatch) {
-          data = { udise: localMatch.udise, schoolName: localMatch.name, existingData: null };
+      if (GAS_URL && GAS_URL.startsWith('http')) {
+        try {
+          const response = await fetch(`${GAS_URL}?udise=${searchCode}`, {
+            method: 'GET',
+            mode: 'cors',
+          });
+          if (!response.ok) throw new Error('HTTP status ' + response.status);
+          data = await response.json();
+        } catch (fetchErr) {
+          console.error('Fetch attempt failed:', fetchErr);
+          // If fetch fails, we still try to check if the school exists in PRESET_MASTER
+          const localMatch = PRESET_SCHOOLS.find(s => s.udise === searchCode);
+          if (localMatch) {
+            setError('सर्वर से संपर्क नहीं हो पाया, परन्तु यह विद्यालय मास्टर लिस्ट में है। कृपया इंटरनेट या सर्वर सेटिंग चेक करें। (Server unreachable, but school exists in master).');
+          } else {
+            throw new Error('NETWORK_OR_NOT_FOUND');
+          }
+          return;
         }
       }
 
       if (data && !data.error) {
-        setFormData({
-          udise: data.udise,
-          schoolName: data.schoolName,
-          isOperated: data.existingData?.isOperated || '',
-          centerCount: data.existingData?.centerCount || '',
-          distanceCenterCount: data.existingData?.distanceCenterCount || '',
-          extraRoom: data.existingData?.extraRoom || '',
-          openSpace: data.existingData?.openSpace || '',
-          buildingStatus: data.existingData?.buildingStatus || '',
-          buildingStatusCount: data.existingData?.buildingStatusCount || '',
-          lastUpdated: data.existingData?.lastUpdated || '',
-        });
-        setIsUpdate(!!data.existingData);
+        if (data.existingData) {
+          setFormData({
+            udise: data.udise,
+            schoolName: data.schoolName,
+            isOperated: data.existingData.isOperated || '',
+            centerCount: data.existingData.centerCount || '',
+            distanceCenterCount: data.existingData.distanceCenterCount || '',
+            extraRoom: data.existingData.extraRoom || '',
+            openSpace: data.existingData.openSpace || '',
+            buildingStatus: data.existingData.buildingStatus || '',
+            buildingStatusCount: data.existingData.buildingStatusCount || '',
+            lastUpdated: data.existingData.lastUpdated || '',
+          });
+          setIsUpdate(true);
+        } else {
+          setError('इस विद्यालय का डेटा अभी तक दर्ज नहीं किया गया है। (Data not found in records).');
+        }
       } else if (data && data.error) {
         setError('विद्यालय का UDISE कोड मास्टर रिकॉर्ड में नहीं मिला। (UDISE Code not found in master records).');
       } else {
-        setError('UDISE कोड अमान्य है या कनेक्शन में त्रुटि है। (UDISE Code not found).');
+        setError('UDISE कोड अमान्य है या डेटा उपलब्ध नहीं है। (Invalid UDISE or no data).');
       }
     } catch (err) {
       console.error(err);
-      setError('सर्वर से संपर्क नहीं हो सका। कृपया इंटरनेट चेक करें। (Connection error or invalid URL).');
+      if (err instanceof Error && err.message === 'NETWORK_OR_NOT_FOUND') {
+        setError('विद्यालय नहीं मिला या नेटवर्क त्रुटि। (School not found or network error).');
+      } else {
+        setError('सर्वर से संपर्क नहीं हो सका। कृपया अपनी इंटरनेट सेटिंग या GAS यूआरएल चेक करें। (Connection error).');
+      }
     } finally {
       setIsLoading(false);
     }
